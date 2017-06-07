@@ -2,88 +2,105 @@
 #
 # tournament.py -- implementation of a Swiss-system tournament
 #
+# Written for Udacity fullstack nanodegree program.
 
 import psycopg2
 
+# Connect to database and get cursor
 
-def connect():
-    """Connect to the PostgreSQL database.  Returns a database connection."""
-    return psycopg2.connect("dbname=tournament")
+def connect(database_name="tournament"):
+    try:
+        db = psycopg2.connect("dbname={}".format(database_name))
+        cursor = db.cursor()
+        return db, cursor
+    except:
+        print("Unable to access database")
 
-
+# Delete match from matches table and players table
 def deleteMatches():
-    conn = connect()
-    c = conn.cursor()
-    c.execute("Update players set matches = 0")
-    c.execute("Update players set wins = 0")
-    c.execute("Delete from matches;")
-    conn.commit()
-    conn.close()
+    db, cursor = connect()
+    cursor.execute("UPDATE players SET matches = 0")
+    cursor.execute("UPDATE players SET wins = 0")
+    cursor.execute("DELETE FROM matches;")
+    db.commit()
+    db.close()
 
-
+# Deleting a player by removing a row from the player's table
 def deletePlayers():
-    conn = connect()
-    c = conn.cursor()
-    c.execute("Delete from players;")
-    conn.commit()
-    conn.close()
+    db, cursor = connect()
+    cursor.execute("Delete from players;")
+    db.commit()
+    db.close()
 
 
-
+# Count players by counting rows
 def countPlayers():
-    conn = connect()
-    c = conn.cursor()
-    c.execute("Select count(*) from players;")
-    player_count = c.fetchone()[0]
+    db, cursor = connect()
+    cursor.execute("SELECT count(*) FROM players;")
+    player_count = cursor.fetchone()[0]
     return player_count
 
 
 
-# add row to player table with new name
+# Add row to player table with new name
 
 def registerPlayer(name):
-    conn = connect()
-    c = conn.cursor()
-    c.execute("Insert into players (name, wins, matches) values (%s, 0, 0)", (name,))
-    conn.commit()
-    conn.close()
+    db, cursor = connect()
+    query = "INSERT INTO players (name, wins, matches) VALUES (%s, 0, 0)"
+    paramater = (name,)
+    cursor.execute(query, paramater)
+    db.commit()
+    db.close()
 
+# Get standings by arranging player table rows from most wins to least
 
 def playerStandings():
-    conn = connect()
-    c = conn.cursor()
-    c.execute("Select * from players order by wins desc;")
-    standings = c.fetchall()
-    conn.close()
+    db, cursor = connect()
+    cursor.execute("SELECT * FROM standing ORDER BY wins DESC;")
+    standings = cursor.fetchall()
+    db.close()
     return standings
 
 
-# record winner and loser in matches table
-# record one more match for each player in players table
-# increase winner's win count by 1
-
+# Record winner and loser in matches table(first query)
+# Record one more match for each player in players table(second and third queries)
+# Increase winner's win count by 1(last query)
 
 def reportMatch(winner, loser):
-    conn = connect()
-    c = conn.cursor()
+    db, cursor = connect()
 
-    c.execute("Insert into matches (winner, loser) values (%s, %s)", (winner, loser))
-    c.execute("Update players set matches = matches + 1 where id = (%s)", (winner,))
-    c.execute("Update players set matches = matches + 1 where id = (%s)", (loser,))
-    c.execute("Update players set wins = wins + 1 where id = (%s)", (winner,))
-    conn.commit()
-    conn.close()
+    query = "INSERT INTO matches (winner, loser) VALUES (%s, %s)"
+    parameters = (winner, loser)
+    cursor.execute(query, parameters)
 
+
+    query = "UPDATE players SET matches = matches + 1 WHERE id = (%s)"
+    parameter = (winner,)
+    cursor.execute(query, parameter)
+
+    query = "UPDATE players SET matches = matches + 1 WHERE id = (%s)"
+    parameter = (loser,)
+    cursor.execute(query, parameter)
+
+
+    query = "UPDATE players SET wins = wins + 1 WHERE id = (%s)"
+    parameter = (winner,)
+    cursor.execute(query, parameter)
+
+    db.commit()
+    db.close()
+
+# Count number of rows in matches table
 
 def countMatches():
-    conn = connect()
-    c = conn.cursor()
-    c.execute("Select count(*) from matches;")
-    match_count = c.fetchone()[0]
+    db, cursor = connect()
+    cursor.execute("SELECT count(*) FROM matches;")
+    match_count = cursor.fetchone()[0]
+    db.close()
     return match_count
 
 
-# pair off all players in the list
+# Pair off all players in the list before any matches played
 
 def initial_pairing(even_list):
     x = 0
@@ -94,27 +111,27 @@ def initial_pairing(even_list):
     return pairs
 
 
+#Create match ups of players if their win and match counts are the same
 
 def swissPairings():
-    conn = connect()
-
-    c = conn.cursor()
+    db, cursor = connect()
     match_count = countMatches()
 
-    # pair players at the beginning
+    # Pair players at the beginning using initial_pairings
     if match_count == 0:
-        c.execute("Select id, name from players")
-        player_list = c.fetchall()
+        cursor.execute("SELECT id, name FROM players")
+        player_list = cursor.fetchall()
         pairs = initial_pairing(player_list)
 
-    # pair up players with equal wins and matches if a match has been played
+    # Get number of pairs (n_pair) of players by dividing player_count by 2
     else:
         player_count = countPlayers()
         n_pair = (player_count/2)
 
-        c.execute("""Select a.id, a.name, b.id, b.name from players a, players b where
-        a.wins = b.wins and a.matches = b.matches and a.id > b.id limit (%s)""", (n_pair,))
-        pairs = c.fetchall()
+    # Select two players where number of wins and matches are equal for the number of pairs that exist
+        cursor.execute("""SELECT a.id, a.name, b.id, b.name FROM players a, players b WHERE
+        a.wins = b.wins AND a.matches = b.matches AND a.id > b.id LIMIT (%s)""", (n_pair,))
+        pairs = cursor.fetchall()
 
-    conn.close()
+    db.close()
     return pairs
